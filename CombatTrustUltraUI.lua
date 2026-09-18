@@ -2,6 +2,8 @@
 -- Standalone UI layer for an existing getgenv().CombatTrustProbe table.
 -- This file does NOT recreate or modify the combat hooks themselves.
 
+-- SERVICES
+
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -26,6 +28,8 @@ if G.CombatTrustUltraUI then
     end)
 end
 
+-- THEME
+
 local Theme = {
     Bg = Color3.fromRGB(9, 11, 17),
     Bg2 = Color3.fromRGB(14, 17, 25),
@@ -43,6 +47,8 @@ local Theme = {
     Blue2 = Color3.fromRGB(34, 52, 88),
     Red = Color3.fromRGB(239, 88, 104),
 }
+
+-- HELPERS
 
 local function corner(o, r)
     local c = Instance.new("UICorner")
@@ -78,6 +84,7 @@ local function safeCall(name, ...)
         if ok then
             return true, result
         end
+        warn("[Combat UI] action " .. tostring(name) .. " failed: " .. tostring(result))
     end
     return false
 end
@@ -129,8 +136,11 @@ local function requestSave()
 end
 
 local function setBoolean(key, value)
+    if safeCall("SetBoolean", key, value == true) then
+        return
+    end
+
     Probe[key] = value == true
-    safeCall("SetBoolean", key, Probe[key])
     requestSave()
 end
 
@@ -171,6 +181,7 @@ local function currentRosterIndex()
             return i
         end
     end
+    return nil
 end
 
 local function cycleTarget(dir)
@@ -201,6 +212,8 @@ local function toggleMode()
     requestSave()
 end
 
+-- ROOT
+
 local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 local old = playerGui:FindFirstChild("CombatTrustUltraUI")
 if old then old:Destroy() end
@@ -215,6 +228,7 @@ pcall(function()
 end)
 gui.Parent = playerGui
 G.CombatTrustUltraUI = gui
+Probe.UI = gui
 
 local panel = Instance.new("Frame")
 panel.Name = "Panel"
@@ -234,6 +248,8 @@ constraint.MinSize = Vector2.new(300, 380)
 constraint.MaxSize = Vector2.new(540, 630)
 constraint.Parent = panel
 
+-- CLEANUP
+
 local trackedConnections = {}
 local connectionsCleaned = false
 
@@ -249,12 +265,17 @@ local function cleanupConnections()
     connectionsCleaned = true
 
     for _, connection in ipairs(trackedConnections) do
-        connection:Disconnect()
+        pcall(function()
+            connection:Disconnect()
+        end)
     end
     table.clear(trackedConnections)
 
     if G.CombatTrustUltraUI == gui then
         G.CombatTrustUltraUI = nil
+    end
+    if Probe.UI == gui then
+        Probe.UI = nil
     end
 end
 
@@ -267,6 +288,8 @@ gradient.Color = ColorSequence.new({
 })
 gradient.Rotation = 90
 gradient.Parent = panel
+
+-- HEADER
 
 local header = Instance.new("Frame")
 header.Name = "Header"
@@ -405,6 +428,8 @@ local function sectionLabel(textValue, order)
     return label
 end
 
+-- TARGET CARD
+
 local targetCard = Instance.new("Frame")
 targetCard.LayoutOrder = 1
 targetCard.Size = UDim2.new(1, 0, 0, 72)
@@ -447,6 +472,8 @@ targetInfo.TextXAlignment = Enum.TextXAlignment.Left
 targetInfo.Parent = targetCard
 
 sectionLabel("PRIMARY", 2)
+
+-- CONTROLS
 
 local stateContainer = Instance.new("Frame")
 stateContainer.LayoutOrder = 3
@@ -583,6 +610,8 @@ hitButton.Activated:Connect(function()
     setBoolean("CloseHitHook", not (Probe.CloseHitHook == true))
 end)
 
+-- ROSTER
+
 sectionLabel("ENEMY ROSTER", 6)
 
 local rosterList = Instance.new("Frame")
@@ -618,6 +647,7 @@ statusText.TextTruncate = Enum.TextTruncate.AtEnd
 statusText.Parent = status
 
 local rosterSig = ""
+local rosterRows = {}
 local function signature()
     local out = {}
     for i, target in ipairs(getRoster()) do
@@ -626,10 +656,12 @@ local function signature()
     out[#out + 1] = "selected=" .. tostring(
         Probe.CurrentTarget and Probe.CurrentTarget.Key or Probe.ManualTargetKey
     )
+    out[#out + 1] = "active=" .. tostring(Probe.CurrentTarget ~= nil)
     return table.concat(out, "|")
 end
 
 local function clearRoster()
+    table.clear(rosterRows)
     for _, child in ipairs(rosterList:GetChildren()) do
         if child ~= rosterLayout then
             child:Destroy()
@@ -699,6 +731,7 @@ local function renderRoster(force)
         info.TextSize = 8
         info.TextColor3 = Theme.Muted
         info.TextXAlignment = Enum.TextXAlignment.Left
+        info.TextTruncate = Enum.TextTruncate.AtEnd
         info.Parent = row
 
         local dist = Instance.new("TextLabel")
@@ -722,6 +755,12 @@ local function renderRoster(force)
             dist.TextColor3 = Theme.Blue
         end
 
+        rosterRows[index] = {
+            Key = target.Key,
+            Info = info,
+            Distance = dist,
+        }
+
         row.Activated:Connect(function()
             selectTarget(index)
             renderRoster(true)
@@ -729,11 +768,43 @@ local function renderRoster(force)
     end
 end
 
+local function updateRosterMetrics(roster)
+    for index, target in ipairs(roster) do
+        local row = rosterRows[index]
+        if row and row.Key == target.Key then
+            local player = target.Player
+            local model = target.Model
+            local username = player and player.Name or (model and model.Name) or "unknown"
+            local humanoid = target.Humanoid
+            local healthText = ""
+
+            if humanoid then
+                healthText = string.format(
+                    "  •  %.0f/%.0f HP",
+                    tonumber(humanoid.Health) or 0,
+                    tonumber(humanoid.MaxHealth) or 0
+                )
+            end
+
+            row.Info.Text = "@" .. tostring(username) .. healthText
+            row.Distance.Text = string.format("%.1f studs", tonumber(target.Distance) or 0)
+        end
+    end
+end
+
+-- REFRESH
+
 local lastBooleanStates = {}
 
 local function refresh()
     local roster = getRoster()
     local count = #roster
+
+    local shouldBeVisible = Probe.PanelVisible ~= false
+    if panel.Visible ~= shouldBeVisible then
+        panel.Visible = shouldBeVisible
+        floatingButton.Visible = not shouldBeVisible
+    end
 
     enemyBadge.Text = tostring(count) .. (count == 1 and " ENEMY" or " ENEMIES")
 
@@ -783,7 +854,7 @@ local function refresh()
 
         targetTitle.Text = tostring(name)
         targetInfo.Text = string.format(
-            "%s mode  •  %.1f studs",
+            "%s MODE  •  %.1f studs",
             tostring(Probe.TargetMode or "MANUAL"),
             tonumber(target.Distance) or 0
         )
@@ -808,6 +879,7 @@ local function refresh()
     )
 
     renderRoster(false)
+    updateRosterMetrics(roster)
 end
 
 local function setVisible(value)
@@ -825,10 +897,31 @@ floatingButton.Activated:Connect(function()
     setVisible(true)
 end)
 
+-- DRAG
+
 local dragging = false
 local dragStart = Vector2.zero
 local startOffset = Vector2.zero
 local dragInput
+
+local function clampPanelToViewport()
+    local cam = workspace.CurrentCamera
+    if not cam then
+        return
+    end
+
+    local viewport = cam.ViewportSize
+    local panelSize = panel.AbsoluteSize
+    local maxX = math.max(0, (viewport.X - panelSize.X) / 2 - 8)
+    local maxY = math.max(0, (viewport.Y - panelSize.Y) / 2 - 8)
+
+    panel.Position = UDim2.new(
+        0.5,
+        math.clamp(panel.Position.X.Offset, -maxX, maxX),
+        0.5,
+        math.clamp(panel.Position.Y.Offset, -maxY, maxY)
+    )
+end
 
 header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1
@@ -879,6 +972,8 @@ trackConnection(UserInputService.InputEnded:Connect(function(input)
     end
 end))
 
+-- RESPONSIVE
+
 local function responsive()
     local cam = workspace.CurrentCamera
     if not cam then
@@ -903,7 +998,7 @@ local function responsive()
         actionGrid.CellSize = UDim2.new(0.5, -4, 0, 47)
         actionContainer.Size = UDim2.new(1, 0, 0, 102)
     else
-        panel.Size = UDim2.fromOffset(520, math.min(610, size.Y - 70))
+        panel.Size = UDim2.fromOffset(520, math.min(610, availableHeight))
         actionGrid.FillDirectionMaxCells = 4
         actionGrid.CellSize = UDim2.new(0.25, -6, 0, 47)
         actionContainer.Size = UDim2.new(1, 0, 0, 47)
@@ -924,15 +1019,32 @@ local function responsive()
         enemyBadge.Size = UDim2.fromOffset(82, 31)
         enemyBadge.TextSize = 9
     end
+
+    task.defer(function()
+        if gui.Parent then
+            clampPanelToViewport()
+        end
+    end)
 end
 
-responsive()
+local cameraConnection
+local function bindCurrentCamera()
+    if cameraConnection then
+        cameraConnection:Disconnect()
+        cameraConnection = nil
+    end
 
-if workspace.CurrentCamera then
-    trackConnection(
-        workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(responsive)
-    )
+    local camera = workspace.CurrentCamera
+    if camera then
+        cameraConnection = trackConnection(
+            camera:GetPropertyChangedSignal("ViewportSize"):Connect(responsive)
+        )
+    end
+    responsive()
 end
+
+trackConnection(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(bindCurrentCamera))
+bindCurrentCamera()
 
 task.spawn(function()
     while gui.Parent and Probe.Alive ~= false do
