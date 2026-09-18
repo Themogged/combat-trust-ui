@@ -217,10 +217,10 @@ corner(Panel, 14); stroke(Panel, Theme.Border)
 local Scale = create("UIScale", { Scale = Settings.Scale }, Panel)
 create("UISizeConstraint", { MinSize = Vector2.new(300, 390), MaxSize = Vector2.new(500, 650) }, Panel)
 local Header = surface(create("Frame", { BackgroundColor3 = Theme.Surface, Size = UDim2.new(1, 0, 0, 66) }, Panel))
-local Title = label(Header, "COMBAT TRUST", 16, Theme.Text, Enum.Font.GothamBold); Title.Position = UDim2.fromOffset(16, 11); Title.Size = UDim2.new(1, -150, 0, 21)
-local Subtitle = label(Header, "ULTRA CONTROL  •  V2", 10, Theme.Muted, Enum.Font.GothamSemibold); Subtitle.Position = UDim2.fromOffset(16, 34); Subtitle.Size = UDim2.new(1, -150, 0, 18)
-local Status = label(Header, "● READY", 11, Theme.Success, Enum.Font.GothamBold); Status.Position = UDim2.new(1, -178, 0, 23); Status.Size = UDim2.fromOffset(68, 20); Status.TextXAlignment = Enum.TextXAlignment.Right
-local MinimizeButton = button(Header, "—"); MinimizeButton.Position = UDim2.new(1, -104, 0, 11); MinimizeButton.Size = UDim2.fromOffset(42, 44)
+local Title = label(Header, "COMBAT TRUST", 16, Theme.Text, Enum.Font.GothamBold); Title.Position = UDim2.fromOffset(16, 11); Title.Size = UDim2.new(1, -196, 0, 21)
+local Subtitle = label(Header, "ULTRA CONTROL  •  V2", 10, Theme.Muted, Enum.Font.GothamSemibold); Subtitle.Position = UDim2.fromOffset(16, 34); Subtitle.Size = UDim2.new(1, -196, 0, 18)
+local Status = label(Header, "● READY", 11, Theme.Success, Enum.Font.GothamBold); Status.Position = UDim2.new(1, -190, 0, 23); Status.Size = UDim2.fromOffset(68, 20); Status.TextXAlignment = Enum.TextXAlignment.Right
+local MinimizeButton = button(Header, "MIN"); MinimizeButton.Position = UDim2.new(1, -116, 0, 11); MinimizeButton.Size = UDim2.fromOffset(54, 44); MinimizeButton.BackgroundColor3 = Theme.AccentSoft; MinimizeButton.TextColor3 = Theme.Accent
 local CloseButton = button(Header, "X"); CloseButton.Position = UDim2.new(1, -56, 0, 11); CloseButton.Size = UDim2.fromOffset(42, 44)
 
 -- NAVIGATION
@@ -480,6 +480,7 @@ function Controller:Minimize()
     if not self.Alive or VisualState.Minimized then return end
     VisualState.Minimized = true; setPanelVisible(false)
     Panel.Visible = false; Bubble.Visible = true
+    clampObject(Bubble, Settings.BubblePosition)
     Bubble.BackgroundTransparency = 1
     self:Tween(Bubble, { BackgroundTransparency = math.clamp(Settings.Transparency, 0, 0.75) }, Constants.AnimationFast)
     self:Refresh()
